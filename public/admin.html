@@ -108,6 +108,15 @@
       </table>
       <div class="msg" id="slotMsg"></div>
     </section>
+    <section class="card" style="border-color:#f1c4c4">
+      <h2>Reset for event day</h2>
+      <p class="muted" style="margin-top:0">Clears every reservation (including test bookings) so the event starts fresh. Teams and PINs are kept.</p>
+      <label style="flex-direction:row; align-items:center; gap:.5rem; color:var(--ink)">
+        <input type="checkbox" id="resetSlots" style="min-width:0"> Also delete all timeslots (you'll need to create them again)
+      </label>
+      <div class="row" style="margin-top:.75rem"><button class="danger" id="resetBtn">Reset…</button></div>
+      <div class="msg" id="resetMsg"></div>
+    </section>
   </main>
 
 <script>
@@ -317,6 +326,20 @@ $('deleteAllBtn').onclick = async () => {
   if (!confirm('Delete ALL timeslots and every reservation in them?')) return;
   try { const r = await api('POST', '/slots/delete-all', { confirm: 'DELETE' }); say('slotMsg', `Deleted ${r.deleted} slot(s)`); await loadSlots(); }
   catch (err) { say('slotMsg', err.message, false); }
+};
+
+$('resetBtn').onclick = async () => {
+  const withSlots = $('resetSlots').checked;
+  const what = withSlots ? 'every reservation AND every timeslot' : 'every reservation';
+  const typed = prompt(`This deletes ${what}. Teams and PINs are kept.\n\nType RESET to confirm.`);
+  if (typed === null) return;
+  if (typed.trim().toUpperCase() !== 'RESET') return say('resetMsg', 'Not reset: you need to type RESET', false);
+  try {
+    const r = await api('POST', '/reset', { confirm: 'RESET', delete_slots: withSlots });
+    say('resetMsg', `Done: removed ${r.reservations_deleted} reservation(s)` + (withSlots ? ` and ${r.slots_deleted} slot(s)` : ''));
+    $('resetSlots').checked = false;
+    await Promise.all([loadSlots(), loadTeams()]);
+  } catch (e) { say('resetMsg', e.message, false); }
 };
 
 fetch('/api/admin/me').then(r => r.json()).then(d => d.admin ? showApp() : showLogin());

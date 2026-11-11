@@ -148,6 +148,19 @@ router.delete('/reservations/:id', async (req, res) => {
   res.json({ deleted: 1 });
 });
 
+// Event-day reset: removes every reservation, keeps teams and PINs.
+// { confirm: "RESET", delete_slots?: boolean } — delete_slots also removes all timeslots.
+router.post('/reset', async (req, res) => {
+  const body = req.body || {};
+  if (body.confirm !== 'RESET') return badRequest(res, 'Confirmation missing');
+  const result = await db.withTransaction(async c => {
+    const r = await c.query('DELETE FROM reservations');
+    const s = body.delete_slots ? await c.query('DELETE FROM slots') : { rowCount: 0 };
+    return { reservations_deleted: r.rowCount, slots_deleted: s.rowCount };
+  });
+  res.json(result);
+});
+
 // ---------- teams ----------
 
 const PIN_RE = /^\d{4,6}$/;
