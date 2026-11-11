@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin · FLL Practice Tables</title>
+  <style>
+    :root { --bg:#f5f6f8; --card:#fff; --ink:#1d2330; --muted:#667085; --line:#e3e6eb; --accent:#1f5fd6; --danger:#c62f2f; --ok:#1f8a4c; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background:var(--bg); color:var(--ink); }
+    header { background:var(--ink); color:#fff; padding:1rem 1.5rem; display:flex; justify-content:space-between; align-items:center; }
+    header h1 { font-size:1.15rem; margin:0; }
+    main { max-width:960px; margin:1.5rem auto; padding:0 1rem; display:grid; gap:1.25rem; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:1.25rem; }
+    .card h2 { font-size:1rem; margin:0 0 1rem; }
+    .row { display:flex; flex-wrap:wrap; gap:1rem; align-items:flex-end; }
+    label { display:flex; flex-direction:column; gap:.3rem; font-size:.85rem; color:var(--muted); }
+    input { font:inherit; padding:.5rem .6rem; border:1px solid var(--line); border-radius:6px; color:var(--ink); min-width:8rem; }
+    button { font:inherit; padding:.55rem 1rem; border-radius:6px; border:0; background:var(--accent); color:#fff; cursor:pointer; }
+    button.secondary { background:#e9edf3; color:var(--ink); }
+    button.danger { background:var(--danger); }
+    button.link { background:none; color:#fff; text-decoration:underline; padding:0; }
+    button:disabled { opacity:.5; cursor:default; }
+    table { width:100%; border-collapse:collapse; font-size:.95rem; }
+    th, td { text-align:left; padding:.55rem .5rem; border-bottom:1px solid var(--line); vertical-align:top; }
+    th { font-size:.8rem; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.03em; }
+    td.num { font-variant-numeric: tabular-nums; white-space:nowrap; }
+    .msg { margin-top:.75rem; font-size:.9rem; min-height:1.2em; }
+    .msg.err { color:var(--danger); } .msg.ok { color:var(--ok); }
+    .muted { color:var(--muted); font-size:.85rem; }
+    .past td { color:var(--muted); }
+    #login { max-width:360px; margin:4rem auto; }
+    .hidden { display:none !important; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>FLL Practice Tables · Admin</h1>
+    <button class="link hidden" id="logoutBtn">Sign out</button>
+  </header>
+
+  <div id="login" class="card hidden">
+    <h2>Admin sign in</h2>
+    <form id="loginForm" class="row">
+      <label style="flex:1">Password <input type="password" id="password" autocomplete="current-password" required></label>
+      <button type="submit">Sign in</button>
+    </form>
+    <div class="msg" id="loginMsg"></div>
+  </div>
+
+  <main id="app" class="hidden">
+    <section class="card">
+      <h2>Settings</h2>
+      <form id="settingsForm" class="row">
+        <label>Event date <input type="date" id="eventDate" required></label>
+        <label>Default slot length (min) <input type="number" id="slotMinutes" min="1" max="240" required></label>
+        <label>Tables per slot <input type="number" id="tablesPerSlot" min="1" max="20" required></label>
+        <button type="submit">Save settings</button>
+      </form>
+      <p class="muted">Changing the slot length only affects slots you create afterwards. All times are Eastern.</p>
+      <div class="msg" id="settingsMsg"></div>
+    </section>
+
+    <section class="card">
+      <h2>Add timeslots</h2>
+      <form id="bulkForm" class="row">
+        <label>From <input type="time" id="bulkFrom" required></label>
+        <label>To <input type="time" id="bulkTo" required></label>
+        <button type="submit">Create back-to-back slots</button>
+      </form>
+      <p class="muted">Fills the range with slots of the default length. Slots that would overlap existing ones are skipped.</p>
+      <form id="singleForm" class="row" style="margin-top:1rem">
+        <label>Single slot starting at <input type="time" id="singleStart" required></label>
+        <button type="submit" class="secondary">Add one slot</button>
+      </form>
+      <div class="msg" id="addMsg"></div>
+    </section>
+
+    <section class="card">
+      <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:1rem">
+        <h2 style="margin:0">Timeslots <span class="muted" id="slotCount"></span></h2>
+        <button class="danger" id="deleteAllBtn">Delete all slots</button>
+      </div>
+      <table>
+        <thead><tr><th>Start</th><th>End</th><th>Length</th><th>Booked</th><th>Teams</th><th></th></tr></thead>
+        <tbody id="slotRows"></tbody>
+      </table>
+      <div class="msg" id="slotMsg"></div>
+    </section>
+  </main>
+
+<script>
+const TZ = 'America/New_York';
+const $ = id => document.getElementById(id);
+const fmtTime = iso => new Date(iso).toLocaleTimeString('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' });
+
+async function api(method, url, body) {
+  const res = await fetch('/api/admin' + url, {
+    method, headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && url !== '/login') { showLogin(); throw new Error('Signed out'); }
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+function say(el, text, ok = true) {
+  $(el).textContent = text;
+  $(el).className = 'msg ' + (ok ? 'ok' : 'err');
+}
+
+function showLogin() {
+  $('login').classList.remove('hidden');
+  $('app').classList.add('hidden');
+  $('logoutBtn').classList.add('hidden');
+}
+
+async function showApp() {
+  $('login').classList.add('hidden');
+  $('app').classList.remove('hidden');
+  $('logoutBtn').classList.remove('hidden');
+  await loadSlots();
+}
+
+let settings = null;
+
+async function loadSlots() {
+  const data = await api('GET', '/slots');
+  settings = data.settings;
+  $('eventDate').value = settings.event_date;
+  $('slotMinutes').value = settings.slot_minutes;
+  $('tablesPerSlot').value = settings.tables_per_slot;
+
+  const now = Date.now();
+  $('slotCount').textContent = `(${data.slots.length})`;
+  $('slotRows').innerHTML = data.slots.length ? '' :
+    '<tr><td colspan="6" class="muted">No timeslots yet. Add some above.</td></tr>';
+  for (const s of data.slots) {
+    const tr = document.createElement('tr');
+    if (new Date(s.end_at).getTime() < now) tr.className = 'past';
+    const teams = s.reservations.map(r => `T${r.table_no}: #${r.team_number}`).join(', ') || '—';
+    tr.innerHTML = `
+      <td class="num">${fmtTime(s.start_at)}</td>
+      <td class="num">${fmtTime(s.end_at)}</td>
+      <td class="num">${s.duration_min} min</td>
+      <td class="num">${s.reserved} / ${settings.tables_per_slot}</td>
+      <td></td>
+      <td><button class="secondary">Delete</button></td>`;
+    tr.children[4].textContent = teams;
+    tr.querySelector('button').onclick = () => deleteSlot(s);
+    $('slotRows').appendChild(tr);
+  }
+}
+
+async function deleteSlot(s) {
+  const warn = s.reserved ? `\n\nThis slot has ${s.reserved} reservation(s), which will also be removed.` : '';
+  if (!confirm(`Delete the ${fmtTime(s.start_at)} slot?${warn}`)) return;
+  try { await api('DELETE', '/slots/' + s.id); say('slotMsg', 'Slot deleted'); await loadSlots(); }
+  catch (e) { say('slotMsg', e.message, false); }
+}
+
+$('loginForm').onsubmit = async e => {
+  e.preventDefault();
+  try { await api('POST', '/login', { password: $('password').value }); $('password').value = ''; await showApp(); }
+  catch (err) { say('loginMsg', err.message, false); }
+};
+
+$('logoutBtn').onclick = async () => { await api('POST', '/logout'); showLogin(); };
+
+$('settingsForm').onsubmit = async e => {
+  e.preventDefault();
+  try {
+    await api('PUT', '/settings', {
+      event_date: $('eventDate').value,
+      slot_minutes: Number($('slotMinutes').value),
+      tables_per_slot: Number($('tablesPerSlot').value),
+    });
+    say('settingsMsg', 'Settings saved');
+    await loadSlots();
+  } catch (err) { say('settingsMsg', err.message, false); }
+};
+
+$('bulkForm').onsubmit = async e => {
+  e.preventDefault();
+  try {
+    const r = await api('POST', '/slots/bulk', { from: $('bulkFrom').value, to: $('bulkTo').value });
+    say('addMsg', `Created ${r.created} slot(s)` + (r.skipped ? `, skipped ${r.skipped} that overlapped` : ''));
+    await loadSlots();
+  } catch (err) { say('addMsg', err.message, false); }
+};
+
+$('singleForm').onsubmit = async e => {
+  e.preventDefault();
+  try { await api('POST', '/slots', { start: $('singleStart').value }); say('addMsg', 'Slot added'); await loadSlots(); }
+  catch (err) { say('addMsg', err.message, false); }
+};
+
+$('deleteAllBtn').onclick = async () => {
+  if (!confirm('Delete ALL timeslots and every reservation in them?')) return;
+  try { const r = await api('POST', '/slots/delete-all', { confirm: 'DELETE' }); say('slotMsg', `Deleted ${r.deleted} slot(s)`); await loadSlots(); }
+  catch (err) { say('slotMsg', err.message, false); }
+};
+
+fetch('/api/admin/me').then(r => r.json()).then(d => d.admin ? showApp() : showLogin());
+</script>
+</body>
+</html>

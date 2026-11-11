@@ -10,7 +10,7 @@ Practice field reservation system for a FIRST LEGO League tournament.
 | Name | Purpose |
 |------|---------|
 | `DATABASE_URL` | Set automatically by Railway when you add Postgres |
-| `ADMIN_PASSWORD` | Password for the admin page (added in a later step) |
+| `ADMIN_PASSWORD` | Password for the admin page at `/admin` (required) |
 | `PORT` | Set automatically by Railway |
 
 ## Run locally
