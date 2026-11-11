@@ -1,0 +1,17 @@
+{
+  "name": "fll-practice-tables",
+  "version": "0.1.0",
+  "description": "Practice table reservation system for an FLL tournament",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "pg": "^8.13.1"
+  }
+}

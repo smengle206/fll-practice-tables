@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FLL Practice Tables</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 4rem auto; padding: 0 1rem; color: #222; }
+    h1 { margin-bottom: .25rem; }
+    #status { margin-top: 2rem; padding: 1rem; border-radius: 8px; background: #f2f2f2; font-family: ui-monospace, monospace; }
+  </style>
+</head>
+<body>
+  <h1>FLL Practice Tables</h1>
+  <p>The app is deployed. Reservations, admin and TV display are coming next.</p>
+  <div id="status">Checking server…</div>
+  <script>
+    fetch('/health').then(r => r.json()).then(d => {
+      document.getElementById('status').textContent =
+        'Server: OK · Database: ' + (d.database.ok ? 'connected' : 'not connected (' + d.database.reason + ')');
+    }).catch(() => {
+      document.getElementById('status').textContent = 'Server not reachable';
+    });
+  </script>
+</body>
+</html>
