@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const express = require('express');
 const db = require('./db');
 const auth = require('./auth');
@@ -137,6 +138,82 @@ router.post('/slots/delete-all', async (req, res) => {
   if ((req.body && req.body.confirm) !== 'DELETE') return badRequest(res, 'Confirmation missing');
   const { rowCount } = await db.query('DELETE FROM slots');
   res.json({ deleted: rowCount });
+});
+
+// ---------- teams ----------
+
+const PIN_RE = /^\d{4,6}$/;
+const newPin = () => String(crypto.randomInt(0, 10000)).padStart(4, '0');
+
+router.get('/teams', async (req, res) => {
+  const { rows } = await db.query(`
+    SELECT t.id, t.number, t.name, t.pin, COUNT(r.id)::int AS reservations
+    FROM teams t LEFT JOIN reservations r ON r.team_id = t.id
+    GROUP BY t.id ORDER BY t.number`);
+  res.json(rows);
+});
+
+// Add or update teams from pasted text, one team per line:
+//   number, name[, pin]     (comma or tab separated; name and pin optional)
+// Existing team numbers get their name updated (and PIN, if one is given).
+router.post('/teams/import', async (req, res) => {
+  const text = String((req.body && req.body.text) || '');
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (!lines.length) return badRequest(res, 'Paste at least one team');
+
+  const parsed = [];
+  const errors = [];
+  lines.forEach((line, i) => {
+    const parts = line.split(/\t|,/).map(p => p.trim());
+    const number = Number(parts[0]);
+    const name = parts[1] || '';
+    const pin = parts[2] || '';
+    if (!Number.isInteger(number) || number < 1) errors.push(`Line ${i + 1}: "${parts[0]}" is not a team number`);
+    else if (pin && !PIN_RE.test(pin)) errors.push(`Line ${i + 1}: PIN must be 4–6 digits`);
+    else parsed.push({ number, name: name.slice(0, 100), pin });
+  });
+  if (errors.length) return badRequest(res, errors.slice(0, 5).join('; '));
+
+  const result = await db.withTransaction(async c => {
+    let added = 0, updated = 0;
+    for (const t of parsed) {
+      const { rows } = await c.query(`
+        INSERT INTO teams (number, name, pin) VALUES ($1, $2, $3)
+        ON CONFLICT (number) DO UPDATE
+          SET name = EXCLUDED.name,
+              pin = CASE WHEN $4 THEN EXCLUDED.pin ELSE teams.pin END
+        RETURNING (xmax = 0) AS inserted`,
+        [t.number, t.name, t.pin || newPin(), Boolean(t.pin)]);
+      rows[0].inserted ? added++ : updated++;
+    }
+    return { added, updated };
+  });
+  res.json(result);
+});
+
+// Edit one team: { name?, pin? }  — pin "new" generates a fresh random PIN.
+router.put('/teams/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  const { name, pin } = req.body || {};
+  const sets = [], vals = [];
+  if (name !== undefined) { vals.push(String(name).trim().slice(0, 100)); sets.push(`name = $${vals.length}`); }
+  if (pin !== undefined) {
+    const p = pin === 'new' ? newPin() : String(pin).trim();
+    if (!PIN_RE.test(p)) return badRequest(res, 'PIN must be 4–6 digits');
+    vals.push(p); sets.push(`pin = $${vals.length}`);
+  }
+  if (!sets.length) return badRequest(res, 'Nothing to change');
+  vals.push(id);
+  const { rows } = await db.query(
+    `UPDATE teams SET ${sets.join(', ')} WHERE id = $${vals.length} RETURNING id, number, name, pin`, vals);
+  if (!rows.length) return res.status(404).json({ error: 'Team not found' });
+  res.json(rows[0]);
+});
+
+router.delete('/teams/:id', async (req, res) => {
+  const { rowCount } = await db.query('DELETE FROM teams WHERE id = $1', [Number(req.params.id)]);
+  if (!rowCount) return res.status(404).json({ error: 'Team not found' });
+  res.json({ deleted: 1 });
 });
 
 module.exports = { router, getSettings };

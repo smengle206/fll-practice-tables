@@ -78,6 +78,25 @@
 
     <section class="card">
       <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:1rem">
+        <h2 style="margin:0">Teams <span class="muted" id="teamCount"></span></h2>
+        <button class="secondary" id="printPinsBtn">Print PIN list</button>
+      </div>
+      <form id="importForm">
+        <label><span>Add or update teams — one per line: <code>number, name</code> (optionally <code>, PIN</code>). You can paste straight from a spreadsheet.</span>
+          <textarea id="importText" rows="5" placeholder="12345, Robo Raptors&#10;23456, Brick Builders&#10;34567, Lego Legends, 4821" style="font:inherit; padding:.5rem .6rem; border:1px solid var(--line); border-radius:6px; color:var(--ink); resize:vertical"></textarea>
+        </label>
+        <div class="row" style="margin-top:.75rem"><button type="submit">Save teams</button></div>
+      </form>
+      <p class="muted">Teams without a PIN get a random 4-digit one. Re-pasting an existing team number updates its name and keeps its PIN unless you give a new one.</p>
+      <div class="msg" id="teamMsg"></div>
+      <table>
+        <thead><tr><th>Team #</th><th>Name</th><th>PIN</th><th>Bookings</th><th></th></tr></thead>
+        <tbody id="teamRows"></tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:1rem">
         <h2 style="margin:0">Timeslots <span class="muted" id="slotCount"></span></h2>
         <button class="danger" id="deleteAllBtn">Delete all slots</button>
       </div>
@@ -120,10 +139,90 @@ async function showApp() {
   $('login').classList.add('hidden');
   $('app').classList.remove('hidden');
   $('logoutBtn').classList.remove('hidden');
-  await loadSlots();
+  await Promise.all([loadSlots(), loadTeams()]);
 }
 
 let settings = null;
+let teams = [];
+
+async function loadTeams() {
+  teams = await api('GET', '/teams');
+  $('teamCount').textContent = `(${teams.length})`;
+  $('teamRows').innerHTML = teams.length ? '' :
+    '<tr><td colspan="5" class="muted">No teams yet. Paste your team list above.</td></tr>';
+  for (const t of teams) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="num"></td><td></td><td class="num"></td><td class="num"></td>
+      <td style="white-space:nowrap">
+        <button class="secondary" data-a="rename">Rename</button>
+        <button class="secondary" data-a="pin">New PIN</button>
+        <button class="secondary" data-a="del">Delete</button>
+      </td>`;
+    tr.children[0].textContent = t.number;
+    tr.children[1].textContent = t.name || '—';
+    tr.children[2].textContent = t.pin;
+    tr.children[3].textContent = t.reservations;
+    tr.querySelector('[data-a=rename]').onclick = () => renameTeam(t);
+    tr.querySelector('[data-a=pin]').onclick = () => newPin(t);
+    tr.querySelector('[data-a=del]').onclick = () => deleteTeam(t);
+    $('teamRows').appendChild(tr);
+  }
+}
+
+async function renameTeam(t) {
+  const name = prompt(`New name for team #${t.number}:`, t.name);
+  if (name === null) return;
+  try { await api('PUT', '/teams/' + t.id, { name }); say('teamMsg', 'Team renamed'); await loadTeams(); }
+  catch (e) { say('teamMsg', e.message, false); }
+}
+
+async function newPin(t) {
+  if (!confirm(`Give team #${t.number} a new random PIN? Their old PIN will stop working.`)) return;
+  try { const r = await api('PUT', '/teams/' + t.id, { pin: 'new' }); say('teamMsg', `Team #${t.number}'s new PIN is ${r.pin}`); await loadTeams(); }
+  catch (e) { say('teamMsg', e.message, false); }
+}
+
+async function deleteTeam(t) {
+  const warn = t.reservations ? `\n\nThis team has ${t.reservations} booking(s), which will also be removed.` : '';
+  if (!confirm(`Delete team #${t.number}?${warn}`)) return;
+  try { await api('DELETE', '/teams/' + t.id); say('teamMsg', 'Team deleted'); await Promise.all([loadTeams(), loadSlots()]); }
+  catch (e) { say('teamMsg', e.message, false); }
+}
+
+$('importForm').onsubmit = async e => {
+  e.preventDefault();
+  try {
+    const r = await api('POST', '/teams/import', { text: $('importText').value });
+    say('teamMsg', `Added ${r.added} team(s)` + (r.updated ? `, updated ${r.updated}` : ''));
+    $('importText').value = '';
+    await Promise.all([loadTeams(), loadSlots()]);
+  } catch (err) { say('teamMsg', err.message, false); }
+};
+
+// Opens a printable sheet of PIN slips to cut apart and hand to coaches.
+$('printPinsBtn').onclick = () => {
+  if (!teams.length) return say('teamMsg', 'No teams to print', false);
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+  const site = location.origin;
+  const slips = teams.map(t => `
+    <div class="slip">
+      <div class="team">Team #${t.number}</div>
+      <div class="name">${esc(t.name || '')}</div>
+      <div>Practice table PIN: <b>${esc(t.pin)}</b></div>
+      <div class="site">Reserve at ${esc(site)}</div>
+    </div>`).join('');
+  const w = window.open('', '_blank');
+  w.document.write(`<!DOCTYPE html><html><head><title>Team PINs</title><style>
+    body{font-family:system-ui,sans-serif;margin:1rem}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:0}
+    .slip{border:1px dashed #999;padding:1rem;break-inside:avoid}
+    .team{font-size:1.3rem;font-weight:700}.name{color:#555;margin-bottom:.5rem;min-height:1.2em}
+    b{font-size:1.4rem;letter-spacing:.15em}.site{margin-top:.5rem;font-size:.8rem;color:#555}
+  </style></head><body><div class="grid">${slips}</div></body></html>`);
+  w.document.close();
+  w.print();
+};
 
 async function loadSlots() {
   const data = await api('GET', '/slots');
