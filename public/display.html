@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Practice Tables · Display</title>
+  <style>
+    :root {
+      --bg:#0e1420; --panel:#172033; --panel2:#1d2840; --ink:#f3f5f9; --muted:#8b97ad; --line:#2a3650;
+      --accent:#4c8dff; --now:#2fbf71; --warn:#ffb020; --open:#5b6782;
+    }
+    * { box-sizing:border-box; }
+    html, body { height:100%; }
+    body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui, -apple-system, Segoe UI, sans-serif;
+           font-size:1.6vh; overflow:hidden; cursor:default; }
+    .wrap { height:100vh; display:grid; grid-template-rows:auto 1fr; gap:2vh; padding:2.5vh 2.5vw; }
+
+    header { display:flex; justify-content:space-between; align-items:center; }
+    header h1 { margin:0; font-size:3.4vh; font-weight:600; letter-spacing:.02em; }
+    header h1 span { color:var(--muted); font-weight:400; }
+    .clock { font-size:7vh; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:.02em; }
+    .clock small { font-size:3.4vh; color:var(--muted); margin-left:.6vw; font-weight:600; }
+
+    .grid { display:grid; grid-template-columns:1.35fr 1fr; gap:2.5vw; min-height:0; }
+    .left { display:grid; grid-template-rows:auto 1fr; gap:2vh; min-height:0; }
+    .panel { background:var(--panel); border:1px solid var(--line); border-radius:1.6vh; padding:2.4vh 2vw; min-height:0; }
+    .label { font-size:2vh; text-transform:uppercase; letter-spacing:.12em; color:var(--muted); font-weight:600; }
+
+    /* next slot countdown */
+    .next { display:flex; justify-content:space-between; align-items:center; gap:2vw; }
+    .next .big { font-size:15vh; line-height:1; font-weight:800; font-variant-numeric:tabular-nums; color:var(--accent); margin-top:1vh; }
+    .next .big.soon { color:var(--warn); }
+    .next .at { font-size:3.2vh; margin-top:1vh; color:var(--muted); }
+    .next .at b { color:var(--ink); }
+    .next .teams { display:grid; gap:1.2vh; min-width:38%; }
+
+    /* now playing */
+    .now { display:flex; flex-direction:column; }
+    .now .head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:2vh; }
+    .now .head .range { font-size:3.2vh; font-weight:600; }
+    .now .left-time { font-size:3.2vh; color:var(--now); font-variant-numeric:tabular-nums; font-weight:700; }
+    .tables { display:grid; gap:1.6vh; flex:1; align-content:start; }
+    .tables.many { grid-template-columns:1fr 1fr; }
+
+    .tbl { display:flex; align-items:center; gap:1.6vw; background:var(--panel2); border-radius:1.2vh; padding:1.6vh 1.4vw; border-left:.8vh solid var(--open); }
+    .tbl.taken { border-left-color:var(--now); }
+    .tbl .tno { font-size:2vh; color:var(--muted); text-transform:uppercase; letter-spacing:.1em; font-weight:700; min-width:6.5vw; }
+    .tbl .team { font-size:5vh; font-weight:800; font-variant-numeric:tabular-nums; }
+    .tbl .name { font-size:2.4vh; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .tbl.open .team { color:var(--open); font-size:3.6vh; font-weight:700; }
+    .tbl.small { padding:1.1vh 1.2vw; }
+    .tbl.small .team { font-size:3.6vh; }
+    .tbl.small.open .team { font-size:2.8vh; }
+
+    /* upcoming list */
+    .upcoming { display:flex; flex-direction:column; }
+    .upcoming .label { margin-bottom:1.5vh; }
+    .rows { flex:1; overflow:hidden; }
+    .row { display:grid; grid-template-columns:11vw 1fr; gap:1vw; align-items:center; padding:1.4vh 0; border-bottom:1px solid var(--line); }
+    .row:last-child { border-bottom:0; }
+    .row .t { font-size:3.4vh; font-weight:700; font-variant-numeric:tabular-nums; }
+    .row .who { display:flex; flex-wrap:wrap; gap:.8vw; }
+    .pill { font-size:2.4vh; padding:.5vh .9vw; border-radius:99px; background:var(--panel2); font-variant-numeric:tabular-nums; }
+    .pill b { color:var(--muted); font-weight:600; margin-right:.4vw; }
+    .pill.open { color:var(--open); border:1px dashed var(--line); background:none; }
+
+    .empty { color:var(--muted); font-size:3vh; padding:2vh 0; }
+    .offline { position:fixed; bottom:1.5vh; left:50%; transform:translateX(-50%); background:#7a2020; color:#fff;
+               padding:.8vh 1.5vw; border-radius:99px; font-size:2vh; display:none; }
+    .hint { position:fixed; bottom:1.5vh; right:2vw; color:var(--muted); font-size:1.6vh; opacity:.6; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Practice Tables <span id="siteHint"></span></h1>
+      <div class="clock" id="clock">--:--:--</div>
+    </header>
+
+    <div class="grid">
+      <div class="left">
+        <section class="panel next">
+          <div>
+            <div class="label" id="nextLabel">Next slot starts in</div>
+            <div class="big" id="nextCountdown">--:--</div>
+            <div class="at" id="nextAt"></div>
+          </div>
+          <div class="teams" id="nextTeams"></div>
+        </section>
+
+        <section class="panel now">
+          <div class="head">
+            <div>
+              <div class="label">On the tables now</div>
+              <div class="range" id="nowRange"></div>
+            </div>
+            <div class="left-time" id="nowLeft"></div>
+          </div>
+          <div class="tables" id="nowTables"></div>
+        </section>
+      </div>
+
+      <section class="panel upcoming">
+        <div class="label">Coming up</div>
+        <div class="rows" id="upRows"></div>
+      </section>
+    </div>
+  </div>
+  <div class="offline" id="offline">Connection lost — retrying…</div>
+  <div class="hint" id="hint">Click anywhere for full screen</div>
+
+<script>
+const TZ = 'America/New_York';
+const $ = id => document.getElementById(id);
+const t = iso => new Date(iso).getTime();
+const fmtTime = ms => new Date(ms).toLocaleTimeString('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' });
+
+let clockOffset = 0;               // server time minus this computer's time
+const now = () => Date.now() + clockOffset;
+let data = null;                   // { tables_per_slot, slots }
+
+function fmtCountdown(ms) {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return h ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}` : `${m}:${String(sec).padStart(2, '0')}`;
+}
+
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c])); }
+
+// One card per table, filled with the team on it or "Open".
+function tableCards(slot, small) {
+  const n = data.tables_per_slot;
+  const byTable = new Map(slot.reservations.map(r => [r.table_no, r]));
+  let html = '';
+  for (let i = 1; i <= n; i++) {
+    const r = byTable.get(i);
+    html += r
+      ? `<div class="tbl taken ${small ? 'small' : ''}"><div class="tno">Table ${i}</div>
+           <div style="min-width:0"><div class="team">#${esc(r.team_number)}</div>${r.team_name ? `<div class="name">${esc(r.team_name)}</div>` : ''}</div></div>`
+      : `<div class="tbl open ${small ? 'small' : ''}"><div class="tno">Table ${i}</div><div class="team">Open</div></div>`;
+  }
+  return html;
+}
+
+function pills(slot) {
+  const byTable = new Map(slot.reservations.map(r => [r.table_no, r]));
+  let html = '';
+  for (let i = 1; i <= data.tables_per_slot; i++) {
+    const r = byTable.get(i);
+    html += r ? `<span class="pill"><b>T${i}</b>#${esc(r.team_number)}</span>` : `<span class="pill open">T${i} open</span>`;
+  }
+  return html;
+}
+
+// Rebuilds the slot panels. Called when data arrives or a slot boundary passes.
+let renderedKey = '';
+function render() {
+  if (!data) return;
+  const n = now();
+  const current = data.slots.find(s => t(s.start_at) <= n && t(s.end_at) > n) || null;
+  const future = data.slots.filter(s => t(s.start_at) > n);
+  const next = future[0] || null;
+
+  const key = JSON.stringify([current && current.id, next && next.id, data.tables_per_slot, data.slots.map(s => [s.id, s.reservations])]);
+  if (key === renderedKey) return;
+  renderedKey = key;
+
+  // Now
+  $('nowTables').className = 'tables' + (data.tables_per_slot > 4 ? ' many' : '');
+  if (current) {
+    $('nowRange').textContent = `${fmtTime(t(current.start_at))} – ${fmtTime(t(current.end_at))}`;
+    $('nowTables').innerHTML = tableCards(current, data.tables_per_slot > 3);
+  } else {
+    $('nowRange').textContent = '';
+    $('nowLeft').textContent = '';
+    $('nowTables').innerHTML = `<div class="empty">No practice slot in progress</div>`;
+  }
+
+  // Next
+  if (next) {
+    $('nextLabel').textContent = 'Next slot starts in';
+    $('nextAt').innerHTML = `at <b>${esc(fmtTime(t(next.start_at)))}</b>`;
+    $('nextTeams').innerHTML = tableCards(next, true);
+  } else {
+    $('nextLabel').textContent = 'Next slot';
+    $('nextCountdown').textContent = '—';
+    $('nextAt').textContent = 'No more slots scheduled';
+    $('nextTeams').innerHTML = '';
+  }
+
+  // Coming up (after the next slot), as many as fit
+  const rows = future.slice(1, 12);
+  $('upRows').innerHTML = rows.length
+    ? rows.map(s => `<div class="row"><div class="t">${esc(fmtTime(t(s.start_at)))}</div><div class="who">${pills(s)}</div></div>`).join('')
+    : `<div class="empty">Nothing else scheduled</div>`;
+  // Drop rows that don't fit on screen.
+  const box = $('upRows');
+  while (box.lastElementChild && box.scrollHeight > box.clientHeight + 2) box.lastElementChild.remove();
+}
+
+// Every tick: clock + countdowns. Cheap, so it runs often for a smooth seconds display.
+function tick() {
+  const n = now();
+  const d = new Date(n);
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true })
+    .formatToParts(d).reduce((o, p) => (o[p.type] = p.value, o), {});
+  $('clock').innerHTML = `${parts.hour}:${parts.minute}:${parts.second}<small>${parts.dayPeriod}</small>`;
+
+  if (!data) return;
+  render(); // no-op unless a slot boundary passed or data changed
+  const current = data.slots.find(s => t(s.start_at) <= n && t(s.end_at) > n);
+  if (current) $('nowLeft').textContent = `${fmtCountdown(t(current.end_at) - n)} left`;
+  const next = data.slots.find(s => t(s.start_at) > n);
+  if (next) {
+    const ms = t(next.start_at) - n;
+    $('nextCountdown').textContent = fmtCountdown(ms);
+    $('nextCountdown').classList.toggle('soon', ms <= 60000);
+  }
+}
+
+async function load() {
+  try {
+    const sent = Date.now();
+    const res = await fetch('/api/public/slots', { cache: 'no-store' });
+    if (!res.ok) throw new Error(res.status);
+    const d = await res.json();
+    const received = Date.now();
+    clockOffset = new Date(d.now).getTime() - (sent + received) / 2;
+    data = d;
+    $('offline').style.display = 'none';
+    tick();
+  } catch {
+    $('offline').style.display = 'block';
+  }
+}
+
+load();
+setInterval(load, 5000);
+setInterval(tick, 200);
+window.addEventListener('resize', () => { renderedKey = ''; render(); });
+
+// Full screen on click, and keep the screen from sleeping where the browser allows it.
+document.addEventListener('click', () => {
+  if (!document.fullscreenElement && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+});
+document.addEventListener('fullscreenchange', () => { $('hint').style.display = document.fullscreenElement ? 'none' : ''; });
+async function keepAwake() { try { if ('wakeLock' in navigator) await navigator.wakeLock.request('screen'); } catch {} }
+keepAwake();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) keepAwake(); });
+
+$('siteHint').textContent = '· reserve at ' + location.host;
+</script>
+</body>
+</html>
