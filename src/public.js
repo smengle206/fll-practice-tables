@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('./db');
 const { getSettings } = require('./admin');
+const { PUBLIC_URL } = require('./config');
 
 const router = express.Router();
 
@@ -84,6 +85,7 @@ router.get('/slots', async (req, res) => {
     ORDER BY s.start_at`);
   res.json({
     now: new Date().toISOString(),
+    public_url: PUBLIC_URL,
     tables_per_slot: settings.tables_per_slot,
     slots: rows,
   });

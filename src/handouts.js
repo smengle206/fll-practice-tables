@@ -1,12 +1,13 @@
 const QRCode = require('qrcode');
 const db = require('./db');
+const { PUBLIC_URL } = require('./config');
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // Printable coach handouts: four per US-letter page, each with the team's PIN,
 // a QR code to the booking page and short instructions.
 async function handoutsPage(req, res) {
-  const site = `${req.protocol}://${req.get('host')}`;
+  const site = PUBLIC_URL;
   const ids = String(req.query.teams || '').split(',').map(Number).filter(n => Number.isInteger(n) && n > 0);
   const { rows: teams } = ids.length
     ? await db.query('SELECT number, name, pin FROM teams WHERE id = ANY($1) ORDER BY number', [ids])

@@ -227,6 +227,7 @@ async function load() {
     const received = Date.now();
     clockOffset = new Date(d.now).getTime() - (sent + received) / 2;
     data = d;
+    if (d.public_url) $('siteHint').textContent = '· reserve at ' + d.public_url.replace(/^https?:\/\//, '');
     $('offline').style.display = 'none';
     tick();
   } catch {
@@ -248,7 +249,6 @@ async function keepAwake() { try { if ('wakeLock' in navigator) await navigator.
 keepAwake();
 document.addEventListener('visibilitychange', () => { if (!document.hidden) keepAwake(); });
 
-$('siteHint').textContent = '· reserve at ' + location.host;
 </script>
 </body>
 </html>
