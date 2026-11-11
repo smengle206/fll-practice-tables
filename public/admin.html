@@ -81,7 +81,7 @@
     <section class="card">
       <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:1rem">
         <h2 style="margin:0">Teams <span class="muted" id="teamCount"></span></h2>
-        <button class="secondary" id="printPinsBtn">Print PIN list</button>
+        <button class="secondary" id="printPinsBtn">Print handouts</button>
       </div>
       <form id="importForm">
         <label><span>Add or update teams — one per line: <code>number, name</code> (optionally <code>, PIN</code>). You can paste straight from a spreadsheet.</span>
@@ -168,6 +168,7 @@ async function loadTeams() {
       <td style="white-space:nowrap">
         <button class="secondary" data-a="rename">Rename</button>
         <button class="secondary" data-a="pin">New PIN</button>
+        <button class="secondary" data-a="print">Handout</button>
         <button class="secondary" data-a="del">Delete</button>
       </td>`;
     tr.children[0].textContent = t.number;
@@ -177,6 +178,7 @@ async function loadTeams() {
     tr.querySelector('[data-a=rename]').onclick = () => renameTeam(t);
     tr.querySelector('[data-a=pin]').onclick = () => newPin(t);
     tr.querySelector('[data-a=del]').onclick = () => deleteTeam(t);
+    tr.querySelector('[data-a=print]').onclick = () => window.open('/api/admin/handouts?teams=' + t.id, '_blank');
     $('teamRows').appendChild(tr);
   }
 }
@@ -211,28 +213,10 @@ $('importForm').onsubmit = async e => {
   } catch (err) { say('teamMsg', err.message, false); }
 };
 
-// Opens a printable sheet of PIN slips to cut apart and hand to coaches.
+// Opens printable coach handouts (4 per page) in a new tab.
 $('printPinsBtn').onclick = () => {
   if (!teams.length) return say('teamMsg', 'No teams to print', false);
-  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
-  const site = location.origin;
-  const slips = teams.map(t => `
-    <div class="slip">
-      <div class="team">Team #${t.number}</div>
-      <div class="name">${esc(t.name || '')}</div>
-      <div>Practice table PIN: <b>${esc(t.pin)}</b></div>
-      <div class="site">Reserve at ${esc(site)}</div>
-    </div>`).join('');
-  const w = window.open('', '_blank');
-  w.document.write(`<!DOCTYPE html><html><head><title>Team PINs</title><style>
-    body{font-family:system-ui,sans-serif;margin:1rem}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:0}
-    .slip{border:1px dashed #999;padding:1rem;break-inside:avoid}
-    .team{font-size:1.3rem;font-weight:700}.name{color:#555;margin-bottom:.5rem;min-height:1.2em}
-    b{font-size:1.4rem;letter-spacing:.15em}.site{margin-top:.5rem;font-size:.8rem;color:#555}
-  </style></head><body><div class="grid">${slips}</div></body></html>`);
-  w.document.close();
-  w.print();
+  window.open('/api/admin/handouts', '_blank');
 };
 
 async function loadSlots() {

@@ -163,6 +163,9 @@ router.post('/reset', async (req, res) => {
 
 // ---------- teams ----------
 
+// Printable handouts (HTML page). ?teams=1,2,3 limits it to those team ids.
+router.get('/handouts', require('./handouts').handoutsPage);
+
 const PIN_RE = /^\d{4,6}$/;
 const newPin = () => String(crypto.randomInt(0, 10000)).padStart(4, '0');
 
