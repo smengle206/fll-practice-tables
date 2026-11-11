@@ -29,6 +29,8 @@
     .msg.err { color:var(--danger); } .msg.ok { color:var(--ok); }
     .muted { color:var(--muted); font-size:.85rem; }
     .past td { color:var(--muted); }
+    .chip { display:inline-flex; align-items:center; gap:.25rem; background:#eef3fd; border-radius:999px; padding:.15rem .3rem .15rem .6rem; margin:0 .3rem .3rem 0; font-size:.88rem; white-space:nowrap; }
+    .chip .x { background:none; color:var(--danger); padding:0 .35rem; font-size:1.05rem; line-height:1; }
     #login { max-width:360px; margin:4rem auto; }
     .hidden { display:none !important; }
   </style>
@@ -238,7 +240,6 @@ async function loadSlots() {
   for (const s of data.slots) {
     const tr = document.createElement('tr');
     if (new Date(s.end_at).getTime() < now) tr.className = 'past';
-    const teams = s.reservations.map(r => `T${r.table_no}: #${r.team_number}`).join(', ') || '—';
     tr.innerHTML = `
       <td class="num">${fmtTime(s.start_at)}</td>
       <td class="num">${fmtTime(s.end_at)}</td>
@@ -246,10 +247,27 @@ async function loadSlots() {
       <td class="num">${s.reserved} / ${settings.tables_per_slot}</td>
       <td></td>
       <td><button class="secondary">Delete</button></td>`;
-    tr.children[4].textContent = teams;
-    tr.querySelector('button').onclick = () => deleteSlot(s);
+    const cell = tr.children[4];
+    if (!s.reservations.length) cell.textContent = '—';
+    for (const r of s.reservations) {
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      chip.textContent = `Table ${r.table_no}: #${r.team_number} `;
+      const x = document.createElement('button');
+      x.className = 'x'; x.title = 'Remove this reservation'; x.textContent = '×';
+      x.onclick = () => removeReservation(s, r);
+      chip.appendChild(x);
+      cell.appendChild(chip);
+    }
+    tr.querySelector('td:last-child button').onclick = () => deleteSlot(s);
     $('slotRows').appendChild(tr);
   }
+}
+
+async function removeReservation(s, r) {
+  if (!confirm(`Remove team #${r.team_number} from the ${fmtTime(s.start_at)} slot (table ${r.table_no})?\n\nThey'll be able to book a different slot.`)) return;
+  try { await api('DELETE', '/reservations/' + r.id); say('slotMsg', 'Reservation removed'); await Promise.all([loadSlots(), loadTeams()]); }
+  catch (e) { say('slotMsg', e.message, false); }
 }
 
 async function deleteSlot(s) {

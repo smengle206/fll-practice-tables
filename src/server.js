@@ -2,6 +2,7 @@ const path = require('path');
 const express = require('express');
 const db = require('./db');
 const admin = require('./admin');
+const pub = require('./public');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -22,6 +23,7 @@ app.get('/health', async (req, res) => {
 });
 
 app.use('/api/admin', admin.router);
+app.use('/api/public', pub.router);
 
 // Turn unexpected errors into JSON instead of crashing the request.
 app.use((err, req, res, next) => {

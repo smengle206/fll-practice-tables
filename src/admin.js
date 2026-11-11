@@ -84,7 +84,7 @@ router.get('/slots', async (req, res) => {
     SELECT s.id, s.start_at, s.duration_min,
            s.start_at + make_interval(mins => s.duration_min) AS end_at,
            COUNT(r.id)::int AS reserved,
-           COALESCE(json_agg(json_build_object('table_no', r.table_no, 'team_number', t.number, 'team_name', t.name)
+           COALESCE(json_agg(json_build_object('id', r.id, 'table_no', r.table_no, 'team_number', t.number, 'team_name', t.name)
                     ORDER BY r.table_no) FILTER (WHERE r.id IS NOT NULL), '[]') AS reservations
     FROM slots s
     LEFT JOIN reservations r ON r.slot_id = s.id
@@ -138,6 +138,14 @@ router.post('/slots/delete-all', async (req, res) => {
   if ((req.body && req.body.confirm) !== 'DELETE') return badRequest(res, 'Confirmation missing');
   const { rowCount } = await db.query('DELETE FROM slots');
   res.json({ deleted: rowCount });
+});
+
+// ---------- reservations ----------
+
+router.delete('/reservations/:id', async (req, res) => {
+  const { rowCount } = await db.query('DELETE FROM reservations WHERE id = $1', [Number(req.params.id)]);
+  if (!rowCount) return res.status(404).json({ error: 'Reservation not found' });
+  res.json({ deleted: 1 });
 });
 
 // ---------- teams ----------
