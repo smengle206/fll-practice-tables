@@ -64,6 +64,13 @@ const publicTeam = t => ({ id: t.id, number: t.number, name: t.name });
 
 // ---------- routes ----------
 
+// QR code (SVG) for the booking address, used on the TV display.
+let qrSvg = null;
+router.get('/qr.svg', async (req, res) => {
+  if (!qrSvg) qrSvg = await require('qrcode').toString(PUBLIC_URL, { type: 'svg', margin: 1, errorCorrectionLevel: 'M' });
+  res.type('image/svg+xml').set('Cache-Control', 'public, max-age=3600').send(qrSvg);
+});
+
 router.get('/teams', async (req, res) => {
   const { rows } = await db.query('SELECT id, number, name FROM teams ORDER BY number');
   res.json(rows);

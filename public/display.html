@@ -64,6 +64,11 @@
     .pill b { color:var(--muted); font-weight:600; margin-right:.4vw; }
     .pill.open { color:var(--open); border:1px dashed var(--line); background:none; }
 
+    .scan { display:flex; align-items:center; gap:1.4vw; margin-top:1.5vh; padding-top:1.8vh; border-top:1px solid var(--line); }
+    .scan img { width:17vh; height:17vh; background:#fff; border-radius:1vh; padding:.6vh; flex:none; }
+    .scan-title { font-size:3.2vh; font-weight:800; }
+    .scan-url { font-size:2.8vh; color:var(--accent); font-weight:700; margin-top:.4vh; word-break:break-all; }
+    .scan-note { font-size:2vh; color:var(--muted); margin-top:.6vh; }
     .empty { color:var(--muted); font-size:3vh; padding:2vh 0; }
     .offline { position:fixed; bottom:1.5vh; left:50%; transform:translateX(-50%); background:#7a2020; color:#fff;
                padding:.8vh 1.5vw; border-radius:99px; font-size:2vh; display:none; }
@@ -103,6 +108,14 @@
       <section class="panel upcoming">
         <div class="label">Coming up</div>
         <div class="rows" id="upRows"></div>
+        <div class="scan">
+          <img src="/api/public/qr.svg" alt="QR code to reserve a practice slot">
+          <div>
+            <div class="scan-title">Scan to reserve</div>
+            <div class="scan-url" id="scanUrl">tables.darfll.org</div>
+            <div class="scan-note">Coaches: book with your team PIN</div>
+          </div>
+        </div>
       </section>
     </div>
   </div>
@@ -227,7 +240,11 @@ async function load() {
     const received = Date.now();
     clockOffset = new Date(d.now).getTime() - (sent + received) / 2;
     data = d;
-    if (d.public_url) $('siteHint').textContent = '· reserve at ' + d.public_url.replace(/^https?:\/\//, '');
+    if (d.public_url) {
+      const host = d.public_url.replace(/^https?:\/\//, '');
+      $('siteHint').textContent = '· reserve at ' + host;
+      $('scanUrl').textContent = host;
+    }
     $('offline').style.display = 'none';
     tick();
   } catch {
