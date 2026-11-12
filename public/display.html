@@ -72,6 +72,11 @@
     .empty { color:var(--muted); font-size:3vh; padding:2vh 0; }
     .offline { position:fixed; bottom:1.5vh; left:50%; transform:translateX(-50%); background:#7a2020; color:#fff;
                padding:.8vh 1.5vw; border-radius:99px; font-size:2vh; display:none; }
+    .now .left-time.warn { color:var(--warn); }
+    .now.warning { border-color:var(--warn); animation: pulse 1s ease-in-out 3; }
+    @keyframes pulse { 50% { box-shadow: 0 0 0 .6vh rgba(255,176,32,.55); } }
+    .sound { position:fixed; bottom:1.5vh; left:2.5vw; font-size:1.6vh; padding:.5vh 1vw; border-radius:99px; background:var(--panel); border:1px solid var(--line); color:var(--muted); }
+    .sound.off { color:#fff; background:#7a5a10; border-color:var(--warn); }
     .hint { position:fixed; bottom:1.5vh; right:2vw; color:var(--muted); font-size:1.6vh; opacity:.6; }
   </style>
 </head>
@@ -120,6 +125,7 @@
     </div>
   </div>
   <div class="offline" id="offline">Connection lost — retrying…</div>
+  <div class="sound off" id="sound">Click anywhere to turn on the 1-minute warning sound</div>
   <div class="hint" id="hint">Click anywhere for full screen</div>
 
 <script>
@@ -211,6 +217,75 @@ function render() {
   while (box.lastElementChild && box.scrollHeight > box.clientHeight + 2) box.lastElementChild.remove();
 }
 
+// ---------- 1-minute warning sound ----------
+// Browsers only allow sound after someone clicks the page, so the first click unlocks it.
+let audioCtx = null;
+let muted = false;
+let warnedSlotId = null;
+let lastLeftMs = null;
+
+let soundHideTimer = null;
+function soundStatus() {
+  const el = $('sound');
+  const on = audioCtx && audioCtx.state === 'running';
+  clearTimeout(soundHideTimer);
+  el.style.display = '';
+  if (on && !muted) soundHideTimer = setTimeout(() => { el.style.display = 'none'; }, 5000);
+  el.classList.toggle('off', !on || muted);
+  el.textContent = !on ? 'Click anywhere to turn on the 1-minute warning sound'
+    : muted ? 'Warning sound muted (press M to unmute)'
+    : 'Warning sound on (press M to mute, T to test)';
+}
+
+function unlockAudio() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state !== 'running') audioCtx.resume().then(soundStatus, soundStatus);
+  } catch {}
+  soundStatus();
+}
+
+// Three rising two-tone chimes, loud enough to hear over a practice area.
+function playWarning() {
+  if (!audioCtx || audioCtx.state !== 'running' || muted) return;
+  const t0 = audioCtx.currentTime + 0.05;
+  const notes = [[880, 0], [1175, 0.18], [880, 0.6], [1175, 0.78], [880, 1.2], [1175, 1.38]];
+  for (const [freq, at] of notes) {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.0001, t0 + at);
+    gain.gain.exponentialRampToValueAtTime(0.9, t0 + at + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + at + 0.32);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(t0 + at);
+    osc.stop(t0 + at + 0.35);
+  }
+}
+
+// Called every tick with the current slot. Fires once per booked slot,
+// at the moment the time left crosses one minute (not on a page reload mid-minute).
+function checkWarning(current, leftMs) {
+  const warnZone = current && leftMs <= 60000;
+  $('nowLeft').classList.toggle('warn', Boolean(warnZone));
+  if (!current) { lastLeftMs = null; return; }
+  const crossed = lastLeftMs !== null && lastLeftMs > 60000 && leftMs <= 60000;
+  lastLeftMs = leftMs;
+  if (crossed && current.reservations.length && warnedSlotId !== current.id) {
+    warnedSlotId = current.id;
+    playWarning();
+    const panel = document.querySelector('.now');
+    panel.classList.remove('warning'); void panel.offsetWidth; panel.classList.add('warning');
+    setTimeout(() => panel.classList.remove('warning'), 3200);
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'm' || e.key === 'M') { muted = !muted; soundStatus(); }
+  if (e.key === 't' || e.key === 'T') { unlockAudio(); const m = muted; muted = false; playWarning(); muted = m; }
+});
+
 // Every tick: clock + countdowns. Cheap, so it runs often for a smooth seconds display.
 function tick() {
   const n = now();
@@ -223,6 +298,7 @@ function tick() {
   render(); // no-op unless a slot boundary passed or data changed
   const current = data.slots.find(s => t(s.start_at) <= n && t(s.end_at) > n);
   if (current) $('nowLeft').textContent = `${fmtCountdown(t(current.end_at) - n)} left`;
+  checkWarning(current, current ? t(current.end_at) - n : null);
   const next = data.slots.find(s => t(s.start_at) > n);
   if (next) {
     const ms = t(next.start_at) - n;
@@ -259,6 +335,7 @@ window.addEventListener('resize', () => { renderedKey = ''; render(); });
 
 // Full screen on click, and keep the screen from sleeping where the browser allows it.
 document.addEventListener('click', () => {
+  unlockAudio();
   if (!document.fullscreenElement && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
 });
 document.addEventListener('fullscreenchange', () => { $('hint').style.display = document.fullscreenElement ? 'none' : ''; });
